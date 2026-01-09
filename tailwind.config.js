@@ -1,4 +1,5 @@
-const defaultTheme = require('tailwindcss/defaultTheme');
+// const defaultTheme = require('tailwindcss/defaultTheme');
+import defaultTheme from 'tailwindcss/defaultTheme'
 
 module.exports = {
   content: ['index.html', './src/**/*.{html,js,tsx}', './node_modules/preline/preline.js'],
