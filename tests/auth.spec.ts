@@ -41,3 +41,15 @@ test('user registration', async ({ page }) => {
 });
 
 
+test('logout works', async ({ page }) => {
+  await basicInit(page);
+
+  await page.getByRole('link', { name: 'Login' }).click();
+  await page.getByPlaceholder('Email address').fill('d@jwt.com');
+  await page.getByPlaceholder('Password').fill('a');
+  await page.getByRole('button', { name: 'Login' }).click();
+
+  await page.getByRole('link', { name: 'Logout' }).click();
+
+  await expect(page.getByRole('link', { name: 'Login' })).toBeVisible();
+});
