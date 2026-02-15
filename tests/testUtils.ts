@@ -12,6 +12,13 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
       password: "a",
       roles: [{ role }],
     },
+    "a@jwt.com": {
+      id: "4",
+      name: "Admin User", 
+      email: "a@jwt.com",
+      password: "d",
+      roles: [{role: Role.Admin}],
+    }
   };
 
   await page.route("*/**/api/auth", async (route) => {
