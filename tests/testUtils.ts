@@ -14,11 +14,11 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
     },
     "a@jwt.com": {
       id: "4",
-      name: "Admin User", 
+      name: "Admin User",
       email: "a@jwt.com",
       password: "d",
-      roles: [{role: Role.Admin}],
-    }
+      roles: [{ role: Role.Admin }],
+    },
   };
 
   await page.route("*/**/api/auth", async (route) => {
@@ -133,6 +133,70 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
           jwt: "abc123",
         },
       });
+      return;
+    }
+
+    await route.fulfill({ status: 400, json: {} });
+  });
+
+  let allUsers = Object.values(validUsers);
+
+  await page.route(/\/api\/user\?.*/, async (route) => {
+    const url = new URL(route.request().url());
+    const pageNum = Number(url.searchParams.get("page")) || 1;
+    const limit = Number(url.searchParams.get("limit")) || 10;
+    const nameFilter = url.searchParams.get("name") || "";
+
+    // Filter users by name if provided
+    let filteredUsers = allUsers;
+    if (nameFilter) {
+      filteredUsers = allUsers.filter((user) =>
+        user.name?.toLowerCase().includes(nameFilter.toLowerCase()),
+      );
+    }
+
+    // Paginate
+    const startIndex = (pageNum - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+
+    await route.fulfill({
+      json: {
+        users: paginatedUsers,
+        total: filteredUsers.length,
+        page: pageNum,
+        limit,
+      },
+    });
+  });
+
+  await page.route(/\/api\/user\/[^/]+$/, async (route) => {
+    const method = route.request().method();
+    const userId = route.request().url().split("/").pop();
+
+    // Delete user
+    if (method === "DELETE") {
+      allUsers = allUsers.filter((u) => u.id !== userId);
+      await route.fulfill({ json: {} });
+      return;
+    }
+
+    // Update user
+    if (method === "PUT") {
+      const updatedUser = route.request().postDataJSON();
+      const index = allUsers.findIndex((u) => u.id === userId);
+
+      if (index !== -1) {
+        allUsers[index] = { ...allUsers[index], ...updatedUser };
+        await route.fulfill({
+          json: {
+            user: allUsers[index],
+            token: "updated-token-xyz",
+          },
+        });
+      } else {
+        await route.fulfill({ status: 404, json: { error: "User not found" } });
+      }
       return;
     }
 

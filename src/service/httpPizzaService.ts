@@ -16,6 +16,23 @@ const pizzaServiceUrl = import.meta.env.VITE_PIZZA_SERVICE_URL;
 const pizzaFactoryUrl = import.meta.env.VITE_PIZZA_FACTORY_URL;
 
 class HttpPizzaService implements PizzaService {
+  async listUsers(
+    page: number,
+    limit: number,
+    nameFilter: string,
+  ): Promise<User[]> {
+    const data = await this.callEndpoint(
+      `/api/user?page=${page}&limit=${limit}&name=${nameFilter}`,
+    );
+
+    console.log(`Data: ${data.users}`);
+    return data.users;
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    return this.callEndpoint(`/api/user/${userId}`, "DELETE");
+  }
+
   async callEndpoint(
     path: string,
     method: string = "GET",
@@ -23,6 +40,8 @@ class HttpPizzaService implements PizzaService {
   ): Promise<any> {
     return new Promise(async (resolve, reject) => {
       try {
+        console.log("callEndpoint called with:", { path, method, body });
+
         const options: any = {
           method: method,
           headers: {
@@ -32,6 +51,7 @@ class HttpPizzaService implements PizzaService {
         };
 
         const authToken = localStorage.getItem("token");
+        console.log("authToken:", authToken ? "exists" : "missing");
         if (authToken) {
           options.headers["Authorization"] = `Bearer ${authToken}`;
         }
@@ -52,11 +72,11 @@ class HttpPizzaService implements PizzaService {
           reject({ code: r.status, message: j.message });
         }
       } catch (e: any) {
+        console.error("callEndpoint exception:", e);
         reject({ code: 500, message: e.message });
       }
     });
   }
-
   async login(email: string, password: string): Promise<User> {
     const { user, token } = await this.callEndpoint("/api/auth", "PUT", {
       email,
