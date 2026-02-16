@@ -27,7 +27,10 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
     // Handle logout (DELETE)
     if (method === "DELETE") {
       loggedInUser = undefined;
-      await route.fulfill({ status: 200, json: { message: "logout successful" } });
+      await route.fulfill({
+        status: 200,
+        json: { message: "logout successful" },
+      });
       return;
     }
 
@@ -147,27 +150,27 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
   });
 
   let allUsers = Object.values(validUsers);
-  
+
   await page.route("*/**/api/user**", async (route) => {
     const url = route.request().url();
     const method = route.request().method();
-    
+
     // Skip /api/user/me - it has its own handler above
     if (url.match(/\/api\/user\/me$/)) {
       await route.fallback();
       return;
     }
-    
+
     // List users - GET /api/user?page=1&limit=10&name=*
     if (method === "GET" && /\/api\/user(\?|$)/.test(url)) {
       const urlObj = new URL(url);
       let nameFilter = urlObj.searchParams.get("name") || "*";
-      
+
       let filteredUsers = Object.values(validUsers);
-      
+
       if (nameFilter && nameFilter !== "*") {
         const cleanFilter = nameFilter.replace(/\*/g, "");
-        
+
         if (cleanFilter) {
           filteredUsers = filteredUsers.filter((user) => {
             const userName = user.name?.toLowerCase() || "";
@@ -176,26 +179,20 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
           });
         }
       }
-      
+
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ users: filteredUsers })
+        body: JSON.stringify({ users: filteredUsers }),
       });
       return;
     }
-    
+
     // Update/Delete specific user - /api/user/{userId}
     if (url.match(/\/api\/user\/[^/]+$/)) {
       const userId = url.split("/").pop();
 
       // Delete user
-      if (method === "DELETE") {
-        allUsers = allUsers.filter((u) => u.id !== userId);
-        await route.fulfill({ json: {} });
-        return;
-      }
-
       // Update user
       if (method === "PUT") {
         const updatedUser = route.request().postDataJSON();
@@ -203,6 +200,16 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
 
         if (index !== -1) {
           allUsers[index] = { ...allUsers[index], ...updatedUser };
+
+          const userEmail = allUsers[index].email;
+          if (validUsers[userEmail!]) {
+            validUsers[userEmail!] = allUsers[index];
+          }
+
+          if (loggedInUser && loggedInUser.id === userId) {
+            loggedInUser = allUsers[index];
+          }
+
           await route.fulfill({
             json: {
               user: allUsers[index],
@@ -210,12 +217,15 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
             },
           });
         } else {
-          await route.fulfill({ status: 404, json: { error: "User not found" } });
+          await route.fulfill({
+            status: 404,
+            json: { error: "User not found" },
+          });
         }
         return;
       }
     }
-    
+
     await route.fallback();
   });
 
