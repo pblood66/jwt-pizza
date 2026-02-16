@@ -54,7 +54,6 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
     await route.fulfill({ json: { user, token: "abcdef" } });
   });
 
-  // IMPORTANT: /api/user/me must come BEFORE /api/user** to take precedence
   await page.route("*/**/api/user/me", async (route) => {
     await route.fulfill({ json: loggedInUser ?? null });
   });
@@ -149,8 +148,6 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
 
   let allUsers = Object.values(validUsers);
   
-  // General user routes - list/update/delete
-  // This comes AFTER /api/user/me so it doesn't intercept that specific endpoint
   await page.route("*/**/api/user**", async (route) => {
     const url = route.request().url();
     const method = route.request().method();
