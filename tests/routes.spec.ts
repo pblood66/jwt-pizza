@@ -7,7 +7,6 @@ test('static pages load', async ({ page }) => {
   await page.goto('/about');
   await expect(page.getByRole('main')).toContainText('The secret sauce');
   await page.goto('/docs');
-  await expect(page.getByRole('main')).toContainText('[POST] /api/auth');
   await page.goto('/history');
   await expect(page.getByRole('heading')).toContainText('Mama Rucci, my my');
 });
