@@ -24,6 +24,13 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
   await page.route("*/**/api/auth", async (route) => {
     const method = route.request().method();
 
+    // Handle logout (DELETE)
+    if (method === "DELETE") {
+      loggedInUser = undefined;
+      await route.fulfill({ status: 200, json: { message: "logout successful" } });
+      return;
+    }
+
     // Only login should be PUT
     if (method !== "PUT") {
       await route.fulfill({ status: 200, json: {} });
@@ -47,6 +54,7 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
     await route.fulfill({ json: { user, token: "abcdef" } });
   });
 
+  // IMPORTANT: /api/user/me must come BEFORE /api/user** to take precedence
   await page.route("*/**/api/user/me", async (route) => {
     await route.fulfill({ json: loggedInUser ?? null });
   });
@@ -140,67 +148,78 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
   });
 
   let allUsers = Object.values(validUsers);
-
-  await page.route(/\/api\/user\?.*/, async (route) => {
-    const url = new URL(route.request().url());
-    const pageNum = Number(url.searchParams.get("page")) || 1;
-    const limit = Number(url.searchParams.get("limit")) || 10;
-    const nameFilter = url.searchParams.get("name") || "";
-
-    // Filter users by name if provided
-    let filteredUsers = allUsers;
-    if (nameFilter) {
-      filteredUsers = allUsers.filter((user) =>
-        user.name?.toLowerCase().includes(nameFilter.toLowerCase()),
-      );
-    }
-
-    // Paginate
-    const startIndex = (pageNum - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
-
-    await route.fulfill({
-      json: {
-        users: paginatedUsers,
-        total: filteredUsers.length,
-        page: pageNum,
-        limit,
-      },
-    });
-  });
-
-  await page.route(/\/api\/user\/[^/]+$/, async (route) => {
+  
+  // General user routes - list/update/delete
+  // This comes AFTER /api/user/me so it doesn't intercept that specific endpoint
+  await page.route("*/**/api/user**", async (route) => {
+    const url = route.request().url();
     const method = route.request().method();
-    const userId = route.request().url().split("/").pop();
-
-    // Delete user
-    if (method === "DELETE") {
-      allUsers = allUsers.filter((u) => u.id !== userId);
-      await route.fulfill({ json: {} });
+    
+    // Skip /api/user/me - it has its own handler above
+    if (url.match(/\/api\/user\/me$/)) {
+      await route.fallback();
       return;
     }
-
-    // Update user
-    if (method === "PUT") {
-      const updatedUser = route.request().postDataJSON();
-      const index = allUsers.findIndex((u) => u.id === userId);
-
-      if (index !== -1) {
-        allUsers[index] = { ...allUsers[index], ...updatedUser };
-        await route.fulfill({
-          json: {
-            user: allUsers[index],
-            token: "updated-token-xyz",
-          },
-        });
-      } else {
-        await route.fulfill({ status: 404, json: { error: "User not found" } });
+    
+    // List users - GET /api/user?page=1&limit=10&name=*
+    if (method === "GET" && /\/api\/user(\?|$)/.test(url)) {
+      const urlObj = new URL(url);
+      let nameFilter = urlObj.searchParams.get("name") || "*";
+      
+      let filteredUsers = Object.values(validUsers);
+      
+      if (nameFilter && nameFilter !== "*") {
+        const cleanFilter = nameFilter.replace(/\*/g, "");
+        
+        if (cleanFilter) {
+          filteredUsers = filteredUsers.filter((user) => {
+            const userName = user.name?.toLowerCase() || "";
+            const filterLower = cleanFilter.toLowerCase();
+            return userName.includes(filterLower);
+          });
+        }
       }
+      
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ users: filteredUsers })
+      });
       return;
     }
+    
+    // Update/Delete specific user - /api/user/{userId}
+    if (url.match(/\/api\/user\/[^/]+$/)) {
+      const userId = url.split("/").pop();
 
-    await route.fulfill({ status: 400, json: {} });
+      // Delete user
+      if (method === "DELETE") {
+        allUsers = allUsers.filter((u) => u.id !== userId);
+        await route.fulfill({ json: {} });
+        return;
+      }
+
+      // Update user
+      if (method === "PUT") {
+        const updatedUser = route.request().postDataJSON();
+        const index = allUsers.findIndex((u) => u.id === userId);
+
+        if (index !== -1) {
+          allUsers[index] = { ...allUsers[index], ...updatedUser };
+          await route.fulfill({
+            json: {
+              user: allUsers[index],
+              token: "updated-token-xyz",
+            },
+          });
+        } else {
+          await route.fulfill({ status: 404, json: { error: "User not found" } });
+        }
+        return;
+      }
+    }
+    
+    await route.fallback();
   });
 
   // Load app
