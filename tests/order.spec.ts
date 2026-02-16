@@ -10,7 +10,6 @@ test("purchase with login", async ({ page }) => {
   await page.getByRole("textbox", { name: "Password" }).fill("a");
   await page.getByRole("button", { name: "Login" }).click();
   await page.getByRole("button", { name: "Order now" }).click();
-  
 
   // Create order
   await expect(page.locator("h2")).toContainText("Awesome is a click away");

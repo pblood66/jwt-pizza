@@ -40,3 +40,51 @@ test("franchise dashboard loads", async ({ page }) => {
     .click();
   await expect(page.getByRole("list")).toContainText("franchise-dashboard");
 });
+
+test("list users", async ({ page }) => {
+  await basicInit(page, Role.Admin);
+  
+  // Login as admin user
+  await page.getByRole("link", { name: "Login" }).click();
+  await page.getByRole("textbox", { name: "Email address" }).fill("a@jwt.com");
+  await page.getByRole("textbox", { name: "Password" }).fill("d");
+  await page.getByRole("button", { name: "Login" }).click();
+  
+  // Navigate to users list page (adjust selector based on your UI)
+  await page.getByRole("link", { name: "Admin" }).click();
+  // Or wherever the users list is accessed in your app
+  
+  // Verify users are displayed
+  await expect(page.getByRole("main")).toContainText("Kai Chen");
+  await expect(page.getByRole("main")).toContainText("Admin User");
+  
+  // Test name filter if your UI has it
+  await page.getByRole('textbox', { name: 'Filter users' }).click();
+  await page.getByRole('textbox', { name: 'Filter users' }).fill('Kai');
+  await page.getByRole('cell', { name: 'Kai Submit' }).getByRole('button').click();
+  await expect(page.getByRole("main")).toContainText("Kai Chen");
+  await expect(page.getByRole("main")).not.toContainText("Admin User");
+});
+
+test("delete user", async ({ page }) => {
+  await basicInit(page, Role.Admin);
+  
+  // Login as admin user
+  await page.getByRole("link", { name: "Login" }).click();
+  await page.getByRole("textbox", { name: "Email address" }).fill("a@jwt.com");
+  await page.getByRole("textbox", { name: "Password" }).fill("d");
+  await page.getByRole("button", { name: "Login" }).click();
+  
+  // Navigate to admin dashboard
+  await page.getByRole("link", { name: "Admin" }).click();
+  
+  // Verify both users exist before deletion
+  await expect(page.getByRole("main")).toContainText("Kai Chen");
+  await expect(page.getByRole("main")).toContainText("Admin User");
+  
+  // Delete Kai Chen user
+  await page.getByRole('row', { name: 'Kai Chen d@jwt.com admin' }).getByRole('button').click();
+  
+  await expect(page.getByRole("main")).not.toContainText("Kai Chen");
+  await expect(page.getByRole("main")).toContainText("Admin User");
+});

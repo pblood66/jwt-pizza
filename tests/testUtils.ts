@@ -193,6 +193,26 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
       const userId = url.split("/").pop();
 
       // Delete user
+      if (method === "DELETE") {
+        allUsers = allUsers.filter((u) => u.id !== userId);
+
+        // Also remove from validUsers if exists
+        const userToDelete = Object.values(validUsers).find(
+          (u) => u.id === userId,
+        );
+        if (userToDelete && userToDelete.email) {
+          delete validUsers[userToDelete.email];
+        }
+
+        // If deleting the logged-in user, clear loggedInUser
+        if (loggedInUser && loggedInUser.id === userId) {
+          loggedInUser = undefined;
+        }
+
+        await route.fulfill({ json: {} });
+        return;
+      }
+
       // Update user
       if (method === "PUT") {
         const updatedUser = route.request().postDataJSON();
