@@ -19,6 +19,13 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
       password: "d",
       roles: [{ role: Role.Admin }],
     },
+    "f@jwt.com": {
+      id: "5",
+      name: "Franchisee User",
+      email: "f@jwt.com",
+      password: "f",
+      roles: [{ role: Role.Franchisee }],
+    },
   };
 
   await page.route("*/**/api/auth", async (route) => {
@@ -90,12 +97,12 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
     },
   ];
 
-  await page.route(/\/api\/franchise(\?.*)?$/, async (route) => {
+  await page.route(/\/api\/franchise\/\d+$/, async (route) => {
     const method = route.request().method();
 
     // Get all franchises
     if (method === "GET") {
-      await route.fulfill({ json: { franchises } });
+      await route.fulfill({ json: franchises });
       return;
     }
 
@@ -117,9 +124,37 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
   });
 
   await page.route(/\/api\/franchise\/\d+$/, async (route) => {
-    if (route.request().method() === "DELETE") {
+    const method = route.request().method();
+
+    if (method === "GET") {
+      await route.fulfill({ json: franchises });
+      return;
+    }
+
+    if (method === "DELETE") {
       const id = Number(route.request().url().split("/").pop());
       franchises = franchises.filter((f) => f.id !== id);
+      await route.fulfill({ json: {} });
+      return;
+    }
+  });
+
+  await page.route(/\/api\/franchise\/\d+\/store$/, async (route) => {
+    const method = route.request().method();
+
+    if (method === "POST") {
+      const body = route.request().postDataJSON();
+      const newStore = {
+        id: Math.floor(Math.random() * 1000),
+        name: body.name,
+        totalRevenue: 0,
+      };
+      franchises[0].stores.push(newStore);
+      await route.fulfill({ json: newStore });
+      return;
+    }
+
+    if (method === "DELETE") {
       await route.fulfill({ json: {} });
       return;
     }
