@@ -12,10 +12,34 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
       password: "a",
       roles: [{ role }],
     },
+    "a@jwt.com": {
+      id: "4",
+      name: "Admin User",
+      email: "a@jwt.com",
+      password: "d",
+      roles: [{ role: Role.Admin }],
+    },
+    "f@jwt.com": {
+      id: "5",
+      name: "Franchisee User",
+      email: "f@jwt.com",
+      password: "f",
+      roles: [{ role: Role.Franchisee }],
+    },
   };
 
   await page.route("*/**/api/auth", async (route) => {
     const method = route.request().method();
+
+    // Handle logout (DELETE)
+    if (method === "DELETE") {
+      loggedInUser = undefined;
+      await route.fulfill({
+        status: 200,
+        json: { message: "logout successful" },
+      });
+      return;
+    }
 
     // Only login should be PUT
     if (method !== "PUT") {
@@ -73,12 +97,12 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
     },
   ];
 
-  await page.route(/\/api\/franchise(\?.*)?$/, async (route) => {
+  await page.route(/\/api\/franchise\/\d+$/, async (route) => {
     const method = route.request().method();
 
     // Get all franchises
     if (method === "GET") {
-      await route.fulfill({ json: { franchises } });
+      await route.fulfill({ json: franchises });
       return;
     }
 
@@ -100,9 +124,37 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
   });
 
   await page.route(/\/api\/franchise\/\d+$/, async (route) => {
-    if (route.request().method() === "DELETE") {
+    const method = route.request().method();
+
+    if (method === "GET") {
+      await route.fulfill({ json: franchises });
+      return;
+    }
+
+    if (method === "DELETE") {
       const id = Number(route.request().url().split("/").pop());
       franchises = franchises.filter((f) => f.id !== id);
+      await route.fulfill({ json: {} });
+      return;
+    }
+  });
+
+  await page.route(/\/api\/franchise\/\d+\/store$/, async (route) => {
+    const method = route.request().method();
+
+    if (method === "POST") {
+      const body = route.request().postDataJSON();
+      const newStore = {
+        id: Math.floor(Math.random() * 1000),
+        name: body.name,
+        totalRevenue: 0,
+      };
+      franchises[0].stores.push(newStore);
+      await route.fulfill({ json: newStore });
+      return;
+    }
+
+    if (method === "DELETE") {
       await route.fulfill({ json: {} });
       return;
     }
@@ -130,6 +182,106 @@ export async function basicInit(page: Page, role: Role = Role.Diner) {
     }
 
     await route.fulfill({ status: 400, json: {} });
+  });
+
+  let allUsers = Object.values(validUsers);
+
+  await page.route("*/**/api/user**", async (route) => {
+    const url = route.request().url();
+    const method = route.request().method();
+
+    // Skip /api/user/me - it has its own handler above
+    if (url.match(/\/api\/user\/me$/)) {
+      await route.fallback();
+      return;
+    }
+
+    // List users - GET /api/user?page=1&limit=10&name=*
+    if (method === "GET" && /\/api\/user(\?|$)/.test(url)) {
+      const urlObj = new URL(url);
+      let nameFilter = urlObj.searchParams.get("name") || "*";
+
+      let filteredUsers = Object.values(validUsers);
+
+      if (nameFilter && nameFilter !== "*") {
+        const cleanFilter = nameFilter.replace(/\*/g, "");
+
+        if (cleanFilter) {
+          filteredUsers = filteredUsers.filter((user) => {
+            const userName = user.name?.toLowerCase() || "";
+            const filterLower = cleanFilter.toLowerCase();
+            return userName.includes(filterLower);
+          });
+        }
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ users: filteredUsers }),
+      });
+      return;
+    }
+
+    // Update/Delete specific user - /api/user/{userId}
+    if (url.match(/\/api\/user\/[^/]+$/)) {
+      const userId = url.split("/").pop();
+
+      // Delete user
+      if (method === "DELETE") {
+        allUsers = allUsers.filter((u) => u.id !== userId);
+
+        // Also remove from validUsers if exists
+        const userToDelete = Object.values(validUsers).find(
+          (u) => u.id === userId,
+        );
+        if (userToDelete && userToDelete.email) {
+          delete validUsers[userToDelete.email];
+        }
+
+        // If deleting the logged-in user, clear loggedInUser
+        if (loggedInUser && loggedInUser.id === userId) {
+          loggedInUser = undefined;
+        }
+
+        await route.fulfill({ json: {} });
+        return;
+      }
+
+      // Update user
+      if (method === "PUT") {
+        const updatedUser = route.request().postDataJSON();
+        const index = allUsers.findIndex((u) => u.id === userId);
+
+        if (index !== -1) {
+          allUsers[index] = { ...allUsers[index], ...updatedUser };
+
+          const userEmail = allUsers[index].email;
+          if (validUsers[userEmail!]) {
+            validUsers[userEmail!] = allUsers[index];
+          }
+
+          if (loggedInUser && loggedInUser.id === userId) {
+            loggedInUser = allUsers[index];
+          }
+
+          await route.fulfill({
+            json: {
+              user: allUsers[index],
+              token: "updated-token-xyz",
+            },
+          });
+        } else {
+          await route.fulfill({
+            status: 404,
+            json: { error: "User not found" },
+          });
+        }
+        return;
+      }
+    }
+
+    await route.fallback();
   });
 
   // Load app
